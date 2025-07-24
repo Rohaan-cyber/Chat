@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chat Rooms</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="loginPage">
+        <h2>Join Chat Room</h2>
+        <input id="username" placeholder="Username">
+        <input id="room" placeholder="Room name">
+        <button id="joinBtn">Join</button>
+    </div>
+
+    <div id="chatPage" class="hidden" style="display: flex;">
+        <div id="sidebar">
+            <h4>Users</h4>
+            <ul id="userList"></ul>
+        </div>
+
+        <div id="chatMain">
+            <h3 id="roomHeader"></h3>
+            <button id="imageBtn" title="Send Image">📷</button>
+            <input type="file" id="imageInput" accept="image/*" style="display:none;" />
+
+            <ul id="messages"></ul>
+            <p id="typingIndicator"></p>
+
+            <form id="form">
+                <input id="input" autocomplete="off" placeholder="Type a message..." />
+                <button>Send</button>
+            </form>
+        </div>
+
+        <div id="videoCallContainer" style="display:none; margin-top: 15px;">
+            <video id="localVideo" autoplay muted playsinline style="width:150px; border:1px solid black;"></video>
+            <video id="remoteVideo" autoplay playsinline style="width:300px; border:1px solid black; margin-left:10px;"></video>
+            <br>
+            <button id="muteAudioBtn">Mute Audio</button>
+            <button id="toggleVideoBtn">Turn Camera Off</button>
+            <button id="hangupBtn">Hang Up</button>
+
+            <div id="incomingCallPrompt" style="display:none; border:1px solid #666; padding:10px; background:#eee; margin-bottom:10px;">
+                <p><strong><span id="callerName"></span></strong> is calling you</p>
+                <button id="acceptCallBtn">Accept</button>
+                <button id="declineCallBtn">Decline</button>
+            </div>
+
+            <div id="callDuration" style="display:none; margin-top: 10px; font-weight: bold;">
+                Call duration: <span id="callTimer">00:00</span>
+            </div>
+        </div>
+
+
+
+
+        <div id="userListContainer" style="margin-top: 15px;">
+            <h4>Users in room:</h4>
+            <ul id="userList"></ul>
+        </div>
+
+
+    </div>
+
+
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

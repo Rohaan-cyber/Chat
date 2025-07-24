@@ -1,0 +1,107 @@
+body {
+    font-family: "Segoe UI", sans-serif;
+    background: #f9f9f9;
+    margin: 0;
+    padding: 20px;
+}
+
+.hidden {
+    display: none;
+}
+
+#loginPage, #chatPage {
+    max-width: 500px;
+    margin: auto;
+    padding: 20px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 0 10px #ccc;
+}
+
+#messages {
+    list-style: none;
+    padding: 0;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+}
+
+    #messages li {
+        padding: 5px 10px;
+        margin: 4px 0;
+        background: #e0f7fa;
+        border-radius: 5px;
+    }
+
+#input {
+    width: 75%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+button {
+    padding: 10px;
+    border: none;
+    background: #007bff;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+    button:hover {
+        background: #0056b3;
+    }
+
+#typingIndicator {
+    color: #888;
+    font-size: 0.9em;
+}
+
+.status {
+    font-size: 0.7em;
+    color: #888;
+    margin-left: 6px;
+}
+
+
+#chatPage {
+    display: flex;
+    height: 100vh;
+}
+
+#sidebar {
+    width: 200px;
+    background-color: #f0f0f0;
+    padding: 10px;
+    border-right: 1px solid #ccc;
+    overflow-y: auto;
+}
+
+li.private {
+    background-color: #ffeeba;
+    padding: 5px;
+    border-radius: 4px;
+}
+
+
+
+#chatMain {
+    flex: 1;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+}
+
+#messages {
+    flex-grow: 1;
+    overflow-y: auto;
+    list-style: none;
+    padding: 0;
+}
+
+#userList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
