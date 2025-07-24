@@ -1,212 +1,120 @@
 ﻿const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const roomUsers = {};      // { roomName: [ { id, username } ] }
-const userSockets = {};    // { username: socket.id }
+const Filter = require('bad-words');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static('public'));
+const users = {}; // socket.id -> { name, room }
+const nameToSocket = {}; // name -> socket.id
 
-// Profanity filter words list
-const badWords = ['badword1', 'badword2', 'foo', 'bar', 'dog'];
+app.use(express.static(path.join(__dirname, 'public')));
 
-function filterProfanity(msg) {
-    let filteredMsg = msg;
-    badWords.forEach(word => {
-        const regex = new RegExp(`\\b${word}\\b`, 'gi');
-        filteredMsg = filteredMsg.replace(regex, '***');
-    });
-    return filteredMsg;
-}
-
-const jokes = [
-    "Why did the scarecrow win an award? Because he was outstanding in his field!",
-    "I told my wife she was drawing her eyebrows too high. She looked surprised.",
-    "Why don’t scientists trust atoms? Because they make up everything!"
-];
+// Serve index.html
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/public/index.html');
+});
 
 io.on('connection', (socket) => {
-    let username = '';
-    let room = '';
+    console.log(`User connected: ${socket.id}`);
 
     socket.on('joinRoom', ({ name, roomName }) => {
-        username = name;
-        room = roomName;
-        socket.join(room);
+        users[socket.id] = { name, room: roomName };
+        nameToSocket[name] = socket.id;
+        socket.join(roomName);
 
-        userSockets[username] = socket.id;
+        const welcome = { text: `Welcome ${name} to room ${roomName}`, system: true };
+        socket.emit('chat message', welcome);
 
-        if (!roomUsers[room]) roomUsers[room] = [];
-        roomUsers[room].push({ id: socket.id, username });
-
-        socket.to(room).emit('chat message', {
-            text: `${username} joined the room.`,
-            system: true
-        });
-
-        io.to(room).emit('room users', roomUsers[room]);
+        const notice = { text: `${name} has joined the room.`, system: true };
+        socket.to(roomName).emit('chat message', notice);
     });
 
-    socket.on('chat message', (msgObj) => {
-        const text = msgObj.text;
-        const cleanText = filterProfanity(text);
+    socket.on('chat message', (msg) => {
+        const filter = new Filter();
+        const user = users[socket.id];
+        if (!user) return;
 
-        // Handle /pm command
-        if (cleanText.startsWith('/pm')) {
-            const parts = cleanText.split(' ');
-            const toUser = parts[1];
-            const privateMsg = parts.slice(2).join(' ');
-
-            const toSocketId = userSockets[toUser];
-            if (toSocketId && io.sockets.sockets.get(toSocketId)) {
-                io.to(toSocketId).emit('private message', {
-                    from: username,
-                    message: privateMsg
-                });
-                socket.emit('private message', {
-                    from: `You → ${toUser}`,
-                    message: privateMsg
-                });
-            } else {
-                socket.emit('chat message', {
-                    text: `Chatbot: User '${toUser}' not found.`,
-                    system: true
-                });
-            }
-            return;
-        }
-
-        // Other commands
-        if (cleanText.startsWith('/')) {
-            const command = cleanText.split(' ')[0].toLowerCase();
-            if (command === '/help') {
-                socket.emit('chat message', {
-                    text: 'Chatbot: Commands → /help, /joke, /pm [user] [message]',
-                    system: true
-                });
-            } else if (command === '/joke') {
-                const joke = jokes[Math.floor(Math.random() * jokes.length)];
-                socket.emit('chat message', {
-                    text: `Chatbot: ${joke}`,
-                    system: true
-                });
-            } else {
-                socket.emit('chat message', {
-                    text: 'Chatbot: Unknown command. Type /help for commands.',
-                    system: true
-                });
-            }
-            return;
-        }
-
-        // Normal message broadcast
-        io.to(room).emit('chat message', {
-            id: msgObj.id,
-            text: `${username}: ${cleanText}`
-        });
+        const cleanText = filter.clean(msg.text);
+        io.to(user.room).emit('chat message', { text: `${user.name}: ${cleanText}` });
     });
 
-    socket.on('image', (imgObj) => {
-        io.to(room).emit('image', {
-            id: imgObj.id,
-            data: imgObj.data,
-            username
-        });
-    });
-
-    // Delivery/read status
-    socket.on('message delivered', (msgId) => {
-        socket.broadcast.to(room).emit('message delivered', {
-            id: msgId,
-            by: socket.id
-        });
-    });
-
-    socket.on('message read', (msgId) => {
-        socket.broadcast.to(room).emit('message read', {
-            id: msgId,
-            by: socket.id
-        });
-    });
-
-    // Typing indicators
     socket.on('typing', () => {
-        socket.to(room).emit('typing', `${username} is typing...`);
+        const user = users[socket.id];
+        if (user) {
+            socket.to(user.room).emit('typing', `${user.name} is typing...`);
+        }
     });
 
     socket.on('stop typing', () => {
-        socket.to(room).emit('stop typing');
+        const user = users[socket.id];
+        if (user) {
+            socket.to(user.room).emit('stop typing');
+        }
     });
 
-    // Support client-side UI PMs (not via /pm command)
-    socket.on('private message', ({ toUsername, message }) => {
-        const toSocketId = userSockets[toUsername];
-        if (toSocketId && io.sockets.sockets.get(toSocketId)) {
-            io.to(toSocketId).emit('private message', {
-                from: username,
+    socket.on('image', (img) => {
+        const user = users[socket.id];
+        if (!user) return;
+
+        io.to(user.room).emit('image', {
+            username: user.name,
+            data: img.data
+        });
+    });
+
+    socket.on('private message', ({ to, message }) => {
+        const fromUser = users[socket.id];
+        const toSocket = nameToSocket[to];
+        if (fromUser && toSocket) {
+            io.to(toSocket).emit('private message', {
+                from: fromUser.name,
                 message
-            });
-            socket.emit('private message', {
-                from: `You → ${toUsername}`,
-                message
-            });
-        } else {
-            socket.emit('chat message', {
-                text: `Chatbot: User "${toUsername}" is not available.`,
-                system: true
             });
         }
     });
 
-    // --- WebRTC signaling for 1:1 video call ---
-
+    // WebRTC signaling handlers
     socket.on('call-user', ({ toUsername, offer, fromUsername }) => {
-        const toSocketId = userSockets[toUsername];
-        if (toSocketId) {
-            io.to(toSocketId).emit('call-made', { offer, fromUsername });
+        const toSocket = nameToSocket[toUsername];
+        if (toSocket) {
+            io.to(toSocket).emit('call-made', { offer, fromUsername });
         }
     });
 
     socket.on('make-answer', ({ toUsername, answer, fromUsername }) => {
-        const toSocketId = userSockets[toUsername];
-        if (toSocketId) {
-            io.to(toSocketId).emit('answer-made', { answer, fromUsername });
+        const toSocket = nameToSocket[toUsername];
+        if (toSocket) {
+            io.to(toSocket).emit('answer-made', { answer, fromUsername });
         }
     });
 
     socket.on('ice-candidate', ({ toUsername, candidate, fromUsername }) => {
-        const toSocketId = userSockets[toUsername];
-        if (toSocketId) {
-            io.to(toSocketId).emit('ice-candidate', { candidate, fromUsername });
+        const toSocket = nameToSocket[toUsername];
+        if (toSocket) {
+            io.to(toSocket).emit('ice-candidate', { candidate, fromUsername });
         }
     });
-
-    // --- End WebRTC signaling ---
 
     socket.on('disconnect', () => {
-        if (username && room && roomUsers[room]) {
-            roomUsers[room] = roomUsers[room].filter(user => user.id !== socket.id);
-            delete userSockets[username];
-
+        const user = users[socket.id];
+        if (user) {
+            const room = user.room;
             socket.to(room).emit('chat message', {
-                text: `${username} left.`,
+                text: `${user.name} has left the chat.`,
                 system: true
             });
-
-            io.to(room).emit('room users', roomUsers[room]);
-
-            if (roomUsers[room].length === 0) {
-                delete roomUsers[room];
-            }
+            delete nameToSocket[user.name];
+            delete users[socket.id];
         }
     });
 });
 
+// Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`✅ Server running on port ${PORT}`);
+    console.log(`Server listening on port ${PORT}`);
 });
-
