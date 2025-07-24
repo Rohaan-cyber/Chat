@@ -1,7 +1,7 @@
 ﻿const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const Filter = require('bad-words');
+// const Filter = require('bad-words');
 const path = require('path');
 
 const app = express();
