@@ -1,12 +1,13 @@
 ﻿const express = require('express');
 const http = require('http');
-const { Server } = require('socket.io');
 // const Filter = require('bad-words');
 const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
+const { Server } = require('socket.io');
 const io = new Server(server);
+
 
 const users = {}; // socket.id -> { name, room }
 const nameToSocket = {}; // name -> socket.id
