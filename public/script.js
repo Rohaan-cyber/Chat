@@ -17,7 +17,7 @@ const iceServers = {
 };
 
 function sendMessage() {
-    const input = document.getElementById('messageInput');
+    const input = document.getElementById('input');
     const text = input.value;
     if (!text) return;
     const id = Date.now();
@@ -34,7 +34,7 @@ document.getElementById('joinBtn').onclick = () => {
     socket.emit('joinRoom', { name: myUsername, roomName: room });
 };
 
-document.getElementById('sendBtn').onclick = sendMessage();
+document.getElementById('sendBtn').onclick = sendMessage;
 
 document.getElementById('messageInput').addEventListener('keypress', (e) => {
     socket.emit('typing');
