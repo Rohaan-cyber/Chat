@@ -17,7 +17,7 @@ const iceServers = {
 };
 
 function sendMessage() {
-    const input = document.getElementById('input');
+    const input = document.getElementById('messageInput');
     const text = input.value;
     if (!text) return;
     const id = Date.now();
