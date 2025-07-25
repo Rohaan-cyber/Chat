@@ -10,5 +10,18 @@
     "bad-words": "^3.0.4",
     "express": "^4.21.2",
     "socket.io": "^4.8.1"
-  }
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rohaan-cyber/Chat.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Rohaan-cyber/Chat/issues"
+  },
+  "homepage": "https://github.com/Rohaan-cyber/Chat#readme",
+  "description": ""
 }
