@@ -11,6 +11,7 @@ const io = new Server(server);
 
 const users = {}; // socket.id -> { name, room }
 const nameToSocket = {}; // name -> socket.id
+//
 
 app.use(express.static(path.join(__dirname, 'public')));
 

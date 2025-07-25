@@ -16,6 +16,15 @@ const iceServers = {
     ]
 };
 
+function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const text = input.value;
+    if (!text) return;
+    const id = Date.now();
+    socket.emit('chat message', { text, id });
+    input.value = '';
+}
+
 document.getElementById('joinBtn').onclick = () => {
     myUsername = document.getElementById('username').value;
     room = document.getElementById('room').value;
@@ -25,7 +34,7 @@ document.getElementById('joinBtn').onclick = () => {
     socket.emit('joinRoom', { name: myUsername, roomName: room });
 };
 
-document.getElementById('sendBtn').onclick = sendMessage;
+document.getElementById('sendBtn').onclick = sendMessage();
 
 document.getElementById('messageInput').addEventListener('keypress', (e) => {
     socket.emit('typing');
@@ -35,14 +44,7 @@ document.getElementById('messageInput').addEventListener('keypress', (e) => {
     }
 });
 
-function sendMessage() {
-    const input = document.getElementById('messageInput');
-    const text = input.value;
-    if (!text) return;
-    const id = Date.now();
-    socket.emit('chat message', { text, id });
-    input.value = '';
-}
+
 
 socket.on('chat message', msg => {
     addMessage(msg.text, msg.system);
