@@ -1,6 +1,6 @@
 ﻿const express = require('express');
 const http = require('http');
-// const Filter = require('bad-words');
+const Filter = require('bad-words'); // ✅ Import bad-words
 const path = require('path');
 
 const app = express();
@@ -8,10 +8,8 @@ const server = http.createServer(app);
 const { Server } = require('socket.io');
 const io = new Server(server);
 
-
 const users = {}; // socket.id -> { name, room }
 const nameToSocket = {}; // name -> socket.id
-//
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -24,24 +22,35 @@ io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
 
     socket.on('joinRoom', ({ name, roomName }) => {
+        if (nameToSocket[name]) {
+            socket.emit('name-taken', name);
+            return;
+        }
+
         users[socket.id] = { name, room: roomName };
         nameToSocket[name] = socket.id;
         socket.join(roomName);
 
-        const welcome = { text: `Welcome ${name} to room ${roomName}`, system: true };
-        socket.emit('chat message', welcome);
+        socket.emit('chat message', { text: `Welcome ${name} to room ${roomName}`, system: true });
 
-        const notice = { text: `${name} has joined the room.`, system: true };
-        socket.to(roomName).emit('chat message', notice);
+        socket.to(roomName).emit('chat message', {
+            text: `${name} has joined the room.`,
+            system: true
+        });
+
+        socket.to(roomName).emit('user-joined', name); // ✅ Inform others about new user
     });
 
     socket.on('chat message', (msg) => {
-        const filter = new Filter();
         const user = users[socket.id];
         if (!user) return;
 
+        const filter = new Filter();
         const cleanText = filter.clean(msg.text);
-        io.to(user.room).emit('chat message', { text: `${user.name}: ${cleanText}` });
+
+        io.to(user.room).emit('chat message', {
+            text: `${user.name}: ${cleanText}`
+        });
     });
 
     socket.on('typing', () => {
@@ -109,6 +118,7 @@ io.on('connection', (socket) => {
                 text: `${user.name} has left the chat.`,
                 system: true
             });
+            socket.to(room).emit('user-left', user.name); // Optional for frontend to remove call buttons
             delete nameToSocket[user.name];
             delete users[socket.id];
         }

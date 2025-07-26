@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <link rel="icon" href="chat-icon.png" type="image/x-icon">
-
     <title>Chat Rooms</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -23,11 +22,12 @@
 
         <div id="chatMain">
             <h3 id="roomHeader"></h3>
+
             <button id="imageBtn" title="Send Image">📷</button>
             <input type="file" id="imageInput" accept="image/*" style="display:none;" />
 
             <ul id="messages"></ul>
-            <p id="typingIndicator"></p>
+            <p id="typingStatus"></p> <!-- FIXED: changed from typingIndicator to typingStatus -->
 
             <form id="form">
                 <input id="messageInput" autocomplete="off" placeholder="Type a message..." />
@@ -35,7 +35,8 @@
             </form>
         </div>
 
-        <div id="videoCallContainer" style="display:none; margin-top: 15px;">
+        <!-- FIXED: changed id to callArea to match JS -->
+        <div id="callArea" style="display:none; margin-top: 15px;">
             <video id="localVideo" autoplay muted playsinline style="width:150px; border:1px solid black;"></video>
             <video id="remoteVideo" autoplay playsinline style="width:300px; border:1px solid black; margin-left:10px;"></video>
             <br>
@@ -54,18 +55,14 @@
             </div>
         </div>
 
-
+      
         <div id="userListContainer" style="margin-top: 15px;">
             <h4>Users in room:</h4>
-            <ul id="userList"></ul>
+            <ul id="userListContainerList"></ul>
         </div>
-
-
     </div>
 
-
-
     <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
+    <script src="script.js" defer></script>
 </body>
 </html>
