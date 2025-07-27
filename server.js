@@ -10,6 +10,13 @@ const io = new Server(server);
 
 const users = {};          // socket.id -> { name, room }
 const nameToSocket = {};   // username -> socket.id
+const {
+    userJoin,
+    getCurrentUser,
+    userLeave,
+    getRoomUsers
+} = require('./utils/users');
+
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -44,18 +51,17 @@ io.on('connection', (socket) => {
         const usersInRoom = Object.values(users).filter(u => u.room === roomName);
         io.to(roomName).emit('room users', usersInRoom);
     });
-
-    socket.on('chat message', (msg) => {
+    socket.on('chatMessage', (msg) => {
         const user = users[socket.id];
-        if (!user) return;
 
-        const filter = new Filter();
-        const cleanText = filter.clean(msg.text);
-
-        io.to(user.room).emit('chat message', {
-            text: `${user.name}: ${cleanText}`
-        });
+        if (user) {
+            io.to(user.room).emit('chatMessage', {
+                username: user.name,
+                text: msg
+            });
+        }
     });
+
 
     socket.on('typing', () => {
         const user = users[socket.id];
@@ -71,57 +77,33 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('image', (img) => {
+    // image
+    socket.on('image', ({ username, data }) => {
         const user = users[socket.id];
-        if (!user) return;
-
-        io.to(user.room).emit('image', {
-            username: user.name,
-            data: img.data
-        });
+        if (user) {
+            io.to(user.room).emit('image', { username, data });
+        }
     });
 
+
+    // private message
     socket.on('private message', ({ to, message }) => {
-        const fromUser = users[socket.id];
-        const toSocket = nameToSocket[to];
-        if (fromUser && toSocket) {
-            io.to(toSocket).emit('private message', {
-                from: fromUser.name,
+        const target = [...io.sockets.sockets.values()].find(s => s.username === to);
+        if (target) {
+            target.emit('private message', {
+                from: socket.username,
                 message
+            });
+        } else {
+            socket.emit('private message', {
+                from: '🤖 Bot',
+                message: `User "${to}" not found.`
             });
         }
     });
 
-    // WebRTC signaling handlers
-    socket.on('call-user', ({ toUsername, offer, fromUsername }) => {
-        const toSocket = nameToSocket[toUsername];
-        if (toSocket) {
-            io.to(toSocket).emit('call-made', { offer, fromUsername });
-        }
-    });
 
-    socket.on('make-answer', ({ toUsername, answer, fromUsername }) => {
-        const toSocket = nameToSocket[toUsername];
-        if (toSocket) {
-            io.to(toSocket).emit('answer-made', { answer, fromUsername });
-        }
-    });
-
-    socket.on('ice-candidate', ({ toUsername, candidate, fromUsername }) => {
-        const toSocket = nameToSocket[toUsername];
-        if (toSocket) {
-            io.to(toSocket).emit('ice-candidate', { candidate, fromUsername });
-        }
-    });
-
-    
-          // ==== NEW: forward hang‑up ====
-            socket.on('hangup', ({ toUsername }) => {
-                    const toSocket = nameToSocket[toUsername];
-                   if (toSocket) {
-                           io.to(toSocket).emit('hangup');
-                        }
-                });
+    // WebRTC signaling handlers       
 
     socket.on('disconnect', () => {
         const user = users[socket.id];
@@ -143,7 +125,19 @@ io.on('connection', (socket) => {
         }
         console.log(`User disconnected: ${socket.id}`);
     });
+    socket.on('chatMessage', (msg) => {
+        const user = getCurrentUser(socket.id); // ✅ THIS LINE IS CRUCIAL
+
+        if (user) {
+            io.to(user.room).emit('chatMessage', {
+                username: user.username,
+                text: msg
+            });
+        }
+    });
 });
+
+
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
