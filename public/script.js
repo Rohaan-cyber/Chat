@@ -1,227 +1,227 @@
-﻿const socket = io();
-let myUsername = '';
-let room = '';
-let peerConnection;
-let localStream;
-let remoteStream;
+﻿// public/script.js
+window.addEventListener('DOMContentLoaded', () => {
+    const socket = io();
 
-const constraints = {
-    video: true,
-    audio: true
-};
+    let myName = '';
+    let myRoom = '';
+    let partnerName = '';
+    let pc = null;
+    let localStream = null;
+    let remoteStream = null;
+    let iceBuffer = [];
 
-const iceServers = {
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' }
-    ]
-};
+    const $ = id => document.getElementById(id);
 
-function sendMessage() {
-    const input = document.getElementById('messageInput');
-    const text = input.value;
-    if (!text) return;
-    const id = Date.now();
-    socket.emit('chat message', { text, id });
-    input.value = '';
-}
+    $('joinBtn').onclick = () => {
+        myName = $('username').value.trim();
+        myRoom = $('room').value.trim();
+        if (!myName || !myRoom) return alert('Enter username & room name');
 
-document.getElementById('joinBtn').onclick = () => {
-    myUsername = document.getElementById('username').value;
-    room = document.getElementById('room').value;
-    if (!myUsername || !room) return alert('Username and room required');
-    document.getElementById('loginPage').style.display = 'none';
-    document.getElementById('chatPage').style.display = 'block';
-    socket.emit('joinRoom', { name: myUsername, roomName: room });
-};
+        $('loginPage').style.display = 'none';
+        $('chatPage').style.display = 'flex';
+        $('roomHeader').textContent = `Room: ${myRoom}`;
 
-document.getElementById('sendBtn').onclick = sendMessage;
+        socket.emit('joinRoom', { name: myName, roomName: myRoom });
+    };
 
-document.getElementById('messageInput').addEventListener('keypress', (e) => {
-    socket.emit('typing');
-    if (e.key === 'Enter') {
-        sendMessage();
-        socket.emit('stop typing');
-    }
-});
+    $('form').addEventListener('submit', e => {
+        e.preventDefault();
+        const txt = $('messageInput').value.trim();
+        if (!txt) return;
+        socket.emit('chat message', { text: txt });
+        $('messageInput').value = '';
+    });
 
+    $('messageInput').addEventListener('input', e => {
+        socket.emit(e.target.value ? 'typing' : 'stop typing');
+    });
 
+    socket.on('chat message', msg => addMsg(msg.text, msg.system));
+    socket.on('typing', t => $('typingStatus').innerText = t);
+    socket.on('stop typing', () => $('typingStatus').innerText = '');
 
-socket.on('chat message', msg => {
-    addMessage(msg.text, msg.system);
-    if (msg.id) socket.emit('message delivered', msg.id);
-});
-
-socket.on('private message', msg => {
-    addMessage(`(PM) ${msg.from}: ${msg.message}`, true);
-});
-
-socket.on('room users', users => {
-    const list = document.getElementById('userList');
-    list.innerHTML = '';
-    users.forEach(u => {
+    const addMsg = (txt, system = false) => {
         const li = document.createElement('li');
-        li.textContent = u.username;
-        list.appendChild(li);
-    });
-});
-
-socket.on('typing', msg => {
-    document.getElementById('typingStatus').innerText = msg;
-});
-
-socket.on('stop typing', () => {
-    document.getElementById('typingStatus').innerText = '';
-});
-
-socket.on('message delivered', ({ id, by }) => {
-    console.log(`Message ${id} delivered to ${by}`);
-});
-
-socket.on('message read', ({ id, by }) => {
-    console.log(`Message ${id} read by ${by}`);
-});
-
-function addMessage(msg, system = false) {
-    const list = document.getElementById('messages');
-    const li = document.createElement('li');
-    li.textContent = msg;
-    li.style.fontStyle = system ? 'italic' : 'normal';
-    list.appendChild(li);
-}
-
-document.getElementById('imageInput').onchange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-        const id = Date.now();
-        socket.emit('image', { data: reader.result, id });
-    };
-    reader.readAsDataURL(file);
-};
-
-socket.on('image', ({ data, username }) => {
-    const img = document.createElement('img');
-    img.src = data;
-    img.style.maxWidth = '200px';
-    const li = document.createElement('li');
-    li.textContent = `${username}: `;
-    li.appendChild(img);
-    document.getElementById('messages').appendChild(li);
-});
-
-// --------- WebRTC 1:1 CALL -----------
-
-document.getElementById('callBtn').onclick = async () => {
-    const callee = prompt('Enter username to call:');
-    if (!callee) return;
-
-    localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    document.getElementById('localVideo').srcObject = localStream;
-
-    peerConnection = new RTCPeerConnection(iceServers);
-    peerConnection.onicecandidate = e => {
-        if (e.candidate) {
-            socket.emit('ice-candidate', {
-                toUsername: callee,
-                fromUsername: myUsername,
-                candidate: e.candidate
-            });
-        }
-    };
-    peerConnection.ontrack = e => {
-        if (!remoteStream) {
-            remoteStream = new MediaStream();
-            document.getElementById('remoteVideo').srcObject = remoteStream;
-        }
-        remoteStream.addTrack(e.track);
+        li.textContent = txt;
+        li.style.fontStyle = system ? 'italic' : 'normal';
+        $('messages').appendChild(li);
     };
 
-    localStream.getTracks().forEach(track => {
-        peerConnection.addTrack(track, localStream);
+    socket.on('room users', users => {
+        const ul = $('userList');
+        ul.innerHTML = '';
+        users.forEach(({ name }) => {
+            if (name === myName) return;
+            const li = document.createElement('li');
+            li.textContent = name + ' ';
+            const btn = document.createElement('button');
+            btn.textContent = 'Call';
+            btn.onclick = () => startCall(name);
+            li.appendChild(btn);
+            ul.appendChild(li);
+        });
     });
 
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-
-    socket.emit('call-user', {
-        toUsername: callee,
-        fromUsername: myUsername,
-        offer
-    });
-
-    document.getElementById('callArea').style.display = 'block';
-};
-
-document.getElementById('acceptCallBtn').onclick = async () => {
-    localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    document.getElementById('localVideo').srcObject = localStream;
-
-    peerConnection = new RTCPeerConnection(iceServers);
-    peerConnection.onicecandidate = e => {
-        if (e.candidate) {
-            socket.emit('ice-candidate', {
-                toUsername: window.callerName,
-                fromUsername: myUsername,
-                candidate: e.candidate
-            });
-        }
-    };
-    peerConnection.ontrack = e => {
-        if (!remoteStream) {
-            remoteStream = new MediaStream();
-            document.getElementById('remoteVideo').srcObject = remoteStream;
-        }
-        remoteStream.addTrack(e.track);
+    $('imageBtn').onclick = () => $('imageInput').click();
+    $('imageInput').onchange = e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const r = new FileReader();
+        r.onload = () => socket.emit('image', { data: r.result });
+        r.readAsDataURL(file);
     };
 
-    localStream.getTracks().forEach(track => {
-        peerConnection.addTrack(track, localStream);
+    socket.on('image', ({ username, data }) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>${username}:</strong><br><img src="${data}" style="max-width:200px;">`;
+        $('messages').appendChild(li);
     });
 
-    await peerConnection.setRemoteDescription(window.offerFromCaller);
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
+    const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+    const mediaConstraints = { video: true, audio: true };
 
-    socket.emit('make-answer', {
-        toUsername: window.callerName,
-        fromUsername: myUsername,
-        answer
-    });
-
-    document.getElementById('callArea').style.display = 'block';
-};
-
-socket.on('call-made', async ({ offer, fromUsername }) => {
-    window.offerFromCaller = new RTCSessionDescription(offer);
-    window.callerName = fromUsername;
-
-    const accept = confirm(`Incoming call from ${fromUsername}. Accept?`);
-    if (accept) {
-        document.getElementById('acceptCallBtn').style.display = 'block';
+    async function getLocalStream() {
+        if (localStream) return localStream;
+        localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+        $('localVideo').srcObject = localStream;
+        return localStream;
     }
-});
 
-socket.on('answer-made', async ({ answer }) => {
-    if (peerConnection) {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    async function createPeerConnection() {
+        pc = new RTCPeerConnection(rtcConfig);
+        pc.onicecandidate = ({ candidate }) => {
+            if (candidate) {
+                socket.emit('ice-candidate', {
+                    toUsername: partnerName,
+                    fromUsername: myName,
+                    candidate
+                });
+            }
+        };
+        pc.ontrack = ({ streams }) => {
+            $('remoteVideo').srcObject = streams[0];
+        };
+
+        const stream = await getLocalStream();
+        stream.getTracks().forEach(track => pc.addTrack(track, stream));
     }
-});
 
-socket.on('ice-candidate', async ({ candidate }) => {
-    try {
-        if (peerConnection) {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    let callTimerInt = null;
+    function startTimer() {
+        const start = Date.now();
+        $('callDuration').style.display = 'block';
+        callTimerInt = setInterval(() => {
+            const s = Math.floor((Date.now() - start) / 1000);
+            $('callTimer').innerText = `${(s / 60 | 0).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+        }, 1000);
+    }
+
+    function cleanupCallUI() {
+        $('callArea').style.display = 'none';
+        $('incomingCallPrompt').style.display = 'none';
+        $('acceptCallBtn').style.display = 'none';
+        $('callTimer').innerText = '00:00';
+        clearInterval(callTimerInt);
+        $('callDuration').style.display = 'none';
+        partnerName = null;
+    }
+
+    async function startCall(name) {
+        partnerName = name;
+        await createPeerConnection();
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        socket.emit('call-user', {
+            toUsername: partnerName,
+            fromUsername: myName,
+            offer
+        });
+
+        $('callArea').style.display = 'block';
+        startTimer();
+    }
+
+    socket.on('call-made', async ({ offer, fromUsername }) => {
+        partnerName = fromUsername;
+        window.pendingOffer = offer;
+        $('callerName').innerText = fromUsername;
+        $('incomingCallPrompt').style.display = 'block';
+    });
+
+    $('acceptCallBtn').onclick = async () => {
+        $('incomingCallPrompt').style.display = 'none';
+        await createPeerConnection();
+        await pc.setRemoteDescription(new RTCSessionDescription(window.pendingOffer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('make-answer', {
+            toUsername: partnerName,
+            fromUsername: myName,
+            answer
+        });
+        $('callArea').style.display = 'block';
+        startTimer();
+        iceBuffer.forEach(c => pc.addIceCandidate(c));
+        iceBuffer = [];
+    };
+
+    $('declineCallBtn').onclick = () => {
+        socket.emit('chat message', {
+            text: `${myName} declined a call from ${partnerName}`,
+            system: true
+        });
+        cleanupCallUI();
+    };
+
+    socket.on('answer-made', async ({ answer, fromUsername }) => {
+        if (fromUsername !== partnerName || !pc) return;
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        iceBuffer.forEach(c => pc.addIceCandidate(c));
+        iceBuffer = [];
+    });
+
+    socket.on('ice-candidate', async ({ candidate, fromUsername }) => {
+        if (fromUsername !== partnerName) return;
+        if (pc && pc.remoteDescription) {
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (err) {
+                console.error('Error adding ICE candidate', err);
+            }
+        } else {
+            iceBuffer.push(new RTCIceCandidate(candidate));
         }
-    } catch (e) {
-        console.error('Error adding received ice candidate', e);
-    }
-});
+    });
 
-document.getElementById('endCallBtn').onclick = () => {
-    if (peerConnection) peerConnection.close();
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+    function endCall(sendSignal = true) {
+        if (sendSignal && partnerName) {
+            socket.emit('hangup', { toUsername: partnerName });
+        }
+        if (pc) pc.close();
+        if (localStream) localStream.getTracks().forEach(t => t.stop());
+
+        pc = localStream = remoteStream = null;
+        cleanupCallUI();
     }
-    document.getElementById('callArea').style.display = 'none';
-};
+
+    $('hangupBtn').onclick = () => endCall(true);
+    socket.on('hangup', () => endCall(false));
+
+    $('muteAudioBtn').onclick = () => {
+        if (!localStream) return;
+        const t = localStream.getAudioTracks()[0];
+        if (!t) return;
+        t.enabled = !t.enabled;
+        $('muteAudioBtn').textContent = t.enabled ? 'Mute Audio' : 'Unmute Audio';
+    };
+
+    $('toggleVideoBtn').onclick = () => {
+        if (!localStream) return;
+        const t = localStream.getVideoTracks()[0];
+        if (!t) return;
+        t.enabled = !t.enabled;
+        $('toggleVideoBtn').textContent = t.enabled ? 'Turn Camera Off' : 'Turn Camera On';
+    };
+});

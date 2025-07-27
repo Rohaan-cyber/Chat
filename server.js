@@ -1,6 +1,6 @@
 ﻿const express = require('express');
 const http = require('http');
-const Filter = require('bad-words'); // ✅ Import bad-words
+const Filter = require('bad-words');
 const path = require('path');
 
 const app = express();
@@ -8,14 +8,14 @@ const server = http.createServer(app);
 const { Server } = require('socket.io');
 const io = new Server(server);
 
-const users = {}; // socket.id -> { name, room }
-const nameToSocket = {}; // name -> socket.id
+const users = {};          // socket.id -> { name, room }
+const nameToSocket = {};   // username -> socket.id
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Serve index.html
 app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/public/index.html');
+    res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
 io.on('connection', (socket) => {
@@ -31,14 +31,18 @@ io.on('connection', (socket) => {
         nameToSocket[name] = socket.id;
         socket.join(roomName);
 
+        // Welcome message to the new user
         socket.emit('chat message', { text: `Welcome ${name} to room ${roomName}`, system: true });
 
+        // Notify others in the room
         socket.to(roomName).emit('chat message', {
             text: `${name} has joined the room.`,
             system: true
         });
 
-        socket.to(roomName).emit('user-joined', name); // ✅ Inform others about new user
+        // Send updated user list to everyone in the room
+        const usersInRoom = Object.values(users).filter(u => u.room === roomName);
+        io.to(roomName).emit('room users', usersInRoom);
     });
 
     socket.on('chat message', (msg) => {
@@ -110,22 +114,37 @@ io.on('connection', (socket) => {
         }
     });
 
+    
+          // ==== NEW: forward hang‑up ====
+            socket.on('hangup', ({ toUsername }) => {
+                    const toSocket = nameToSocket[toUsername];
+                   if (toSocket) {
+                           io.to(toSocket).emit('hangup');
+                        }
+                });
+
     socket.on('disconnect', () => {
         const user = users[socket.id];
         if (user) {
             const room = user.room;
+
+            // Notify others user left
             socket.to(room).emit('chat message', {
                 text: `${user.name} has left the chat.`,
                 system: true
             });
-            socket.to(room).emit('user-left', user.name); // Optional for frontend to remove call buttons
+
+            // Update user list for room
             delete nameToSocket[user.name];
             delete users[socket.id];
+
+            const usersInRoom = Object.values(users).filter(u => u.room === room);
+            io.to(room).emit('room users', usersInRoom);
         }
+        console.log(`User disconnected: ${socket.id}`);
     });
 });
 
-// Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
