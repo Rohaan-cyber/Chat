@@ -27,11 +27,24 @@ body {
 }
 
     #messages li {
-        padding: 5px 10px;
-        margin: 4px 0;
-        background: #e0f7fa;
-        border-radius: 5px;
+        list-style: none;
+        margin: 5px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        max-width: 60%;
+        word-wrap: break-word;
     }
+
+        #messages li[style*="right"] {
+            background-color: #dcf8c6; /* Light green */
+            align-self: flex-end;
+        }
+
+        #messages li[style*="left"] {
+            background-color: #eee;
+            align-self: flex-start;
+        }
+
 
 #input {
     width: 75%;
@@ -53,16 +66,13 @@ button {
         background: #0056b3;
     }
 
-#typingIndicator {
-    color: #888;
-    font-size: 0.9em;
-}
 
 .status {
-    font-size: 0.7em;
-    color: #888;
-    margin-left: 6px;
+    font-size: 0.75em;
+    color: gray;
+    margin-top: 4px;
 }
+
 
 
 #chatPage {

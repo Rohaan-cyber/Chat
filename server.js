@@ -1,32 +1,25 @@
 ﻿const express = require('express');
 const http = require('http');
-const Filter = require('bad-words');
 const path = require('path');
+const Filter = require('bad-words');
 
 const app = express();
 const server = http.createServer(app);
 const { Server } = require('socket.io');
 const io = new Server(server);
 
-const users = {};          // socket.id -> { name, room }
-const nameToSocket = {};   // username -> socket.id
-const {
-    userJoin,
-    getCurrentUser,
-    userLeave,
-    getRoomUsers
-} = require('./utils/users');
-
-
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve index.html
+// Track users
+const users = {}; // socket.id -> { name, room }
+const nameToSocket = {}; // username -> socket.id
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
 io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id}`);
+    console.log(`🔌 Connected: ${socket.id}`);
 
     socket.on('joinRoom', ({ name, roomName }) => {
         if (nameToSocket[name]) {
@@ -38,30 +31,40 @@ io.on('connection', (socket) => {
         nameToSocket[name] = socket.id;
         socket.join(roomName);
 
-        // Welcome message to the new user
-        socket.emit('chat message', { text: `Welcome ${name} to room ${roomName}`, system: true });
+        socket.emit('chatMessage', {
+            username: '🤖 Bot',
+            text: `Welcome ${name} to room ${roomName}`,
+            system: true
+        });
 
-        // Notify others in the room
-        socket.to(roomName).emit('chat message', {
+        socket.to(roomName).emit('chatMessage', {
+            username: '🤖 Bot',
             text: `${name} has joined the room.`,
             system: true
         });
 
-        // Send updated user list to everyone in the room
-        const usersInRoom = Object.values(users).filter(u => u.room === roomName);
-        io.to(roomName).emit('room users', usersInRoom);
+        updateRoomUserList(roomName);
     });
-    socket.on('chatMessage', (msg) => {
+
+    socket.on('chatMessage', (msg, callback) => {
         const user = users[socket.id];
+        if (!user) return;
 
-        if (user) {
-            io.to(user.room).emit('chatMessage', {
-                username: user.name,
-                text: msg
-            });
-        }
+        const filter = new Filter();
+        const cleanMsg = filter.clean(msg);
+
+        const payload = {
+            username: user.name,
+            text: cleanMsg
+        };
+
+        // Send to others
+        socket.to(user.room).emit('chatMessage', payload);
+        // Send back to sender (so their message appears too)
+        socket.emit('chatMessage', payload);
+
+        callback?.('✓ Delivered');
     });
-
 
     socket.on('typing', () => {
         const user = users[socket.id];
@@ -77,7 +80,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // image
     socket.on('image', ({ username, data }) => {
         const user = users[socket.id];
         if (user) {
@@ -85,13 +87,18 @@ io.on('connection', (socket) => {
         }
     });
 
-
-    // private message
     socket.on('private message', ({ to, message }) => {
-        const target = [...io.sockets.sockets.values()].find(s => s.username === to);
-        if (target) {
-            target.emit('private message', {
-                from: socket.username,
+        const toSocketId = nameToSocket[to];
+        const fromUser = users[socket.id];
+
+        if (toSocketId && fromUser) {
+            io.to(toSocketId).emit('private message', {
+                from: fromUser.name,
+                message
+            });
+
+            socket.emit('private message', {
+                from: `👤 To ${to}`,
                 message
             });
         } else {
@@ -102,44 +109,35 @@ io.on('connection', (socket) => {
         }
     });
 
-
-    // WebRTC signaling handlers       
-
     socket.on('disconnect', () => {
         const user = users[socket.id];
         if (user) {
-            const room = user.room;
+            const { name, room } = user;
 
-            // Notify others user left
-            socket.to(room).emit('chat message', {
-                text: `${user.name} has left the chat.`,
+            socket.to(room).emit('chatMessage', {
+                username: '🤖 Bot',
+                text: `${name} has left the room.`,
                 system: true
             });
 
-            // Update user list for room
-            delete nameToSocket[user.name];
+            delete nameToSocket[name];
             delete users[socket.id];
-
-            const usersInRoom = Object.values(users).filter(u => u.room === room);
-            io.to(room).emit('room users', usersInRoom);
+            updateRoomUserList(room);
         }
-        console.log(`User disconnected: ${socket.id}`);
-    });
-    socket.on('chatMessage', (msg) => {
-        const user = getCurrentUser(socket.id); // ✅ THIS LINE IS CRUCIAL
 
-        if (user) {
-            io.to(user.room).emit('chatMessage', {
-                username: user.username,
-                text: msg
-            });
-        }
+        console.log(`❌ Disconnected: ${socket.id}`);
     });
 });
 
-
+// Utility to emit user list in room
+function updateRoomUserList(room) {
+    const usersInRoom = Object.values(users)
+        .filter(user => user.room === room)
+        .map(user => ({ name: user.name }));
+    io.to(room).emit('room users', usersInRoom);
+}
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+    console.log(`🚀 Server listening on http://localhost:${PORT}`);
 });
